@@ -1,0 +1,10 @@
+[package]
+name = "pika"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+config = "0.13"
+serde = { version = "1.0", features = ["derive"] }
+lapin = "2.0"
+tokio = { version = "1", features = ["full"] } 
