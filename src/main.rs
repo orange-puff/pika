@@ -1,43 +1,40 @@
-use std::env;
-
 use config::{Config, File};
-use lapin::{Connection, ConnectionProperties};
+use std::thread;
+use std::time::Duration;
+
+mod file_sync;
 mod server;
 
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = env::args().collect();
-
-    // If file path is provided, sync this file to the Queue and exit
-    if args.len() > 1 {
-        let file_path = &args[1];
-        println!("File path: {}", file_path);
-        return;
-    }
-    /*
-    let addr = "amqp://user:password@raspberrypi.local:5672/%2f";
-    if let Ok(conn) = Connection::connect(addr, ConnectionProperties::default()).await {
-        println!("Connected to RabbitMQ");
-        conn.close(0, "Normal shutdown").await.unwrap();
-    } else {
-        println!("Failed to connect to RabbitMQ");
-    }
-    */
-
+    // For now, we do not need the server. But it could be useful in the future
     match Config::builder()
         .add_source(File::with_name("config.json").required(true))
         .build()
     {
-        Ok(config_builder) => match config_builder.get::<server::ServerConfig>("ServerConfig") {
-            Ok(server_config) => {
-                server::run(server_config);
+        Ok(config_builder) => {
+            match config_builder.get::<server::ServerConfig>("ServerConfig") {
+                Ok(server_config) => {
+                    thread::spawn(move || server::run(server_config));
+                }
+                Err(e) => {
+                    println!("Error deserializing server config: {}", e);
+                }
             }
-            Err(e) => {
-                println!("Error deserializing server config: {}", e);
+            match config_builder.get::<file_sync::FileSyncConfig>("FileSyncConfig") {
+                Ok(file_sync_config) => {
+                    file_sync::run(file_sync_config).await;
+                }
+                Err(e) => {
+                    println!("Error deserializing file sync config: {}", e);
+                }
             }
-        },
+            loop {
+                thread::sleep(Duration::new(15, 0));
+            }
+        }
         Err(e) => {
-            println!("Error: {}", e);
+            println!("Error parsing config: {}", e);
         }
     }
 }

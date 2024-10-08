@@ -6,5 +6,8 @@ edition = "2021"
 [dependencies]
 config = "0.13"
 serde = { version = "1.0", features = ["derive"] }
-lapin = "2.0"
-tokio = { version = "1", features = ["full"] } 
+tokio = { version = "1", features = ["full"] }
+aws-sdk-s3 = "0.28.0"
+aws-config = "1.5.8"
+aws-types = "0.55.3"
+aws-credential-types = "0.55.3"

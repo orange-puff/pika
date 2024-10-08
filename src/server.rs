@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct ServerConfig {
+    enabled: bool,
     host: String,
     port: u16,
 }
@@ -31,6 +32,11 @@ fn handle_client(mut stream: TcpStream) {
 }
 
 pub fn run(server_config: ServerConfig) {
+    if !server_config.enabled {
+        println!("Server is not enabled");
+        return;
+    }
+
     let addr = format!("{}:{}", server_config.host, server_config.port);
     println!("Server binding to {}", addr);
 

@@ -1,11 +1,13 @@
 # Pika 
-This is a simple console application meant to allow syncing of certain directories between
-multiple computers. This was built to solve a recurring and annoying issue of mine where I only having
-certain code on certain computers. Github is a great way to solve this problem, but I have many
-files that would not require a Github repo, so this solves more general file sync needs.
+This is a simple console app that allows syncing files between my Mac and Windows computers asynchronously, so both do not have to be running for it to work. This is backed by a raspberrypi running the localstack docker container, which is always running at my house.
+
+# Usage 
+
+```
+pika up file.txt
+pika up dir # will zip and upload
+pika down # will download all files with matching prefix
+```
 
 # Usage
-`pika sync /path/to/dir`
-
-# Building
-
+`cargo build --release && ./target/release/pika`
