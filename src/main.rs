@@ -1,7 +1,7 @@
 use std::env;
 
 use config::{Config, File};
-use lapin::{Connection, ConnectionProperties};
+mod file_sync;
 mod server;
 
 #[tokio::main]
@@ -11,18 +11,9 @@ async fn main() {
     // If file path is provided, sync this file to the Queue and exit
     if args.len() > 1 {
         let file_path = &args[1];
-        println!("File path: {}", file_path);
+        file_sync::sync_file(file_path).await;
         return;
     }
-    /*
-    let addr = "amqp://user:password@raspberrypi.local:5672/%2f";
-    if let Ok(conn) = Connection::connect(addr, ConnectionProperties::default()).await {
-        println!("Connected to RabbitMQ");
-        conn.close(0, "Normal shutdown").await.unwrap();
-    } else {
-        println!("Failed to connect to RabbitMQ");
-    }
-    */
 
     match Config::builder()
         .add_source(File::with_name("config.json").required(true))
