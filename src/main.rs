@@ -1,32 +1,43 @@
-use std::env;
-
 use config::{Config, File};
+use serde::Deserialize;
+use std::thread;
+
 mod file_sync;
 mod server;
 
-#[tokio::main]
-async fn main() {
-    let args: Vec<String> = env::args().collect();
+#[derive(Deserialize)]
+struct PikaConfig {
+    start_server: bool,
+}
 
-    // If file path is provided, sync this file to the Queue and exit
-    if args.len() > 1 {
-        let file_path = &args[1];
-        file_sync::sync_file(file_path).await;
-        return;
-    }
-
+fn main() {
+    // For now, we do not need the server. But it could be useful in the future
     match Config::builder()
         .add_source(File::with_name("config.json").required(true))
         .build()
     {
-        Ok(config_builder) => match config_builder.get::<server::ServerConfig>("ServerConfig") {
-            Ok(server_config) => {
-                server::run(server_config);
+        Ok(config_builder) => {
+            if let Ok(pika_config) = config_builder.get::<PikaConfig>("PikaConfig") {
+                if pika_config.start_server {
+                    match config_builder.get::<server::ServerConfig>("ServerConfig") {
+                        Ok(server_config) => {
+                            thread::spawn(move || server::run(server_config));
+                        }
+                        Err(e) => {
+                            println!("Error deserializing server config: {}", e);
+                        }
+                    }
+                }
+                match config_builder.get::<file_sync::FileSyncConfig>("FileSyncConfig") {
+                    Ok(file_sync_config) => {
+                        file_sync::run(file_sync_config);
+                    }
+                    Err(e) => {
+                        println!("Error deserializing file sync config: {}", e);
+                    }
+                }
             }
-            Err(e) => {
-                println!("Error deserializing server config: {}", e);
-            }
-        },
+        }
         Err(e) => {
             println!("Error: {}", e);
         }

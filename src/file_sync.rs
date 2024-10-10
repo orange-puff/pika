@@ -1,12 +1,12 @@
-use lapin::{Connection, ConnectionProperties};
+use serde::Deserialize;
 
-pub async fn sync_file(file_path: &str) {
-    let addr = "amqp://user:password@raspberrypi.local:5672/%2f";
-    if let Ok(conn) = Connection::connect(addr, ConnectionProperties::default()).await {
-        println!("Connected to RabbitMQ");
-        conn.close(0, "Normal shutdown").await.unwrap();
-    } else {
-        println!("Failed to connect to RabbitMQ");
-    }
-    println!("File path: {}", file_path);
+#[derive(Deserialize)]
+pub struct FileSyncConfig {
+    source_path: String,
+    destination_path: String,
+}
+
+pub fn run(config: FileSyncConfig) {
+    println!("Source path: {}", config.source_path);
+    println!("Destination path: {}", config.destination_path);
 }
