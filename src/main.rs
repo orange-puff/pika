@@ -1,6 +1,7 @@
 use config::{Config, File};
 use serde::Deserialize;
 use std::thread;
+use std::time::Duration;
 
 mod file_sync;
 mod server;
@@ -41,5 +42,8 @@ fn main() {
         Err(e) => {
             println!("Error: {}", e);
         }
+    }
+    loop {
+        thread::sleep(Duration::new(15, 0));
     }
 }

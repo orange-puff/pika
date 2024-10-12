@@ -1,6 +1,6 @@
 {
     "PikaConfig": {
-        "start_server": true
+        "start_server": false
     },
     "ServerConfig": {
         "host": "127.0.0.1",
