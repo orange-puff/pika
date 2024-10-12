@@ -7,7 +7,9 @@
         "port": 7878
     },
     "FileSyncConfig": {
-        "source_path": "~/Desktop/sync/src",
-        "destination_path": "~/Desktop/sync/dest"
+        "source_path": "/Users/john/Desktop/sync/src",
+        "destination_path": "/Users/john/Desktop/sync/dest",
+        "s3_path": "raspberrypi.local:4566",
+        "bucket_name": "sync-files"
     }
 }

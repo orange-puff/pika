@@ -11,7 +11,8 @@ struct PikaConfig {
     start_server: bool,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // For now, we do not need the server. But it could be useful in the future
     match Config::builder()
         .add_source(File::with_name("config.json").required(true))
