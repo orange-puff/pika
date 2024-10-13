@@ -1388,7 +1388,9 @@ name = "pika"
 version = "0.1.0"
 dependencies = [
  "aws-config",
+ "aws-credential-types 0.55.3",
  "aws-sdk-s3",
+ "aws-types 0.55.3",
  "config",
  "serde",
  "tokio",

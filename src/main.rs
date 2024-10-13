@@ -32,7 +32,7 @@ async fn main() {
                 }
                 match config_builder.get::<file_sync::FileSyncConfig>("FileSyncConfig") {
                     Ok(file_sync_config) => {
-                        file_sync::run(file_sync_config);
+                        file_sync::run(file_sync_config).await;
                     }
                     Err(e) => {
                         println!("Error deserializing file sync config: {}", e);
@@ -44,6 +44,7 @@ async fn main() {
             println!("Error: {}", e);
         }
     }
+
     loop {
         thread::sleep(Duration::new(15, 0));
     }
