@@ -1,3 +1,7 @@
+use aws_credential_types::provider::SharedCredentialsProvider;
+use aws_credential_types::Credentials;
+use aws_sdk_s3::Client;
+use aws_types::region::Region;
 use serde::Deserialize;
 use std::fs;
 use std::fs::File;
@@ -5,11 +9,7 @@ use std::io::Read;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
-
-use aws_credential_types::provider::SharedCredentialsProvider;
-use aws_credential_types::Credentials;
-use aws_sdk_s3::Client;
-use aws_types::region::Region;
+use tokio::task;
 
 #[derive(Deserialize)]
 pub struct FileSyncConfig {
@@ -79,7 +79,6 @@ async fn source_path_listener(source_path: String) {
 }
 
 pub async fn run(file_config: FileSyncConfig) {
-    // thread::spawn(move || source_path_listener(file_config.source_path));
-    source_path_listener(file_config.source_path).await;
+    task::spawn(async move { source_path_listener(file_config.source_path).await });
     println!("Destination path: {}", file_config.destination_path);
 }
