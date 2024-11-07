@@ -1,5 +1,6 @@
 use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_credential_types::Credentials;
+use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client;
 use aws_types::region::Region;
 use serde::Deserialize;
@@ -16,6 +17,8 @@ use tokio::task;
 pub struct FileSyncConfig {
     source_path: String,
     destination_path: String,
+    s3_path: String,
+    bucket_name: String,
 }
 
 pub struct FileSync {
@@ -29,7 +32,7 @@ impl FileSync {
             SharedCredentialsProvider::new(Credentials::new("test", "test", None, None, "test"));
         // Set up the AWS region and config
         let config = aws_types::SdkConfig::builder()
-            .endpoint_url("http://192.168.0.185:4566")
+            .endpoint_url(&file_sync_config.s3_path)
             .region(Region::new("us-east-1"))
             .credentials_provider(credentials_provider)
             .build();
@@ -41,27 +44,30 @@ impl FileSync {
 }
 
 async fn source_path_listener(file_sync: Arc<FileSync>) {
-    // Create an S3 client
-    let bucket_name = "sync-files";
-
+    /*
     // List objects in the bucket
     let resp = file_sync
         .aws_client
         .list_objects_v2()
-        .bucket(bucket_name)
+        .bucket(&file_sync.file_sync_config.bucket_name)
         .send()
         .await
         .unwrap();
 
     // Print the keys (file names) of the objects in the bucket
     if let Some(objects) = resp.contents() {
-        println!("Files in bucket '{}':", bucket_name);
+        println!(
+            "Files in bucket '{}':",
+            file_sync.file_sync_config.bucket_name
+        );
         for object in objects {
             println!("{}", object.key().unwrap_or("No key"));
         }
     } else {
         println!("No files found in the bucket.");
     }
+    */
+
     loop {
         println!(
             "Looking for files in {}",
@@ -76,16 +82,27 @@ async fn source_path_listener(file_sync: Arc<FileSync>) {
 
             // Check if the entry is a file
             if path.is_file() {
-                println!("Found file: {:?}", path);
-                let file = File::open(&path).expect("Could not open file");
-                let mut buf_reader = std::io::BufReader::new(file);
-                let mut contents = Vec::new();
-                buf_reader
-                    .read_to_end(&mut contents)
-                    .expect("Failed to read file");
+                println!("Found file: {:?}.", path);
+                let mut file = File::open(&path).expect("Could not open file");
+                let mut buffer = Vec::new();
+                file.read_to_end(&mut buffer).unwrap(); // Read the file into a Vec<u8>
+                let byte_stream = ByteStream::from(buffer);
+                println!(
+                    "Sending to S3 bucket {}...",
+                    file_sync.file_sync_config.bucket_name
+                );
+                file_sync
+                    .aws_client
+                    .put_object()
+                    .bucket(&file_sync.file_sync_config.bucket_name)
+                    .key(path.file_name().unwrap().to_str().unwrap())
+                    .body(byte_stream)
+                    .send()
+                    .await
+                    .unwrap();
 
-                let file_name = path.file_name().unwrap().to_str().unwrap();
-                println!("File name: {}", file_name);
+                println!("Removing file {:?}...", path);
+                std::fs::remove_file(&path).unwrap();
             }
         }
 
