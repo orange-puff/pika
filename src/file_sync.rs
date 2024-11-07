@@ -7,6 +7,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::task;
@@ -17,24 +18,35 @@ pub struct FileSyncConfig {
     destination_path: String,
 }
 
-async fn source_path_listener(source_path: String) {
-    let credentials_provider =
-        SharedCredentialsProvider::new(Credentials::new("test", "test", None, None, "test"));
-    // Set up the AWS region and config
-    let config = aws_types::SdkConfig::builder()
-        .endpoint_url("http://192.168.0.185:4566")
-        .region(Region::new("us-east-1"))
-        .credentials_provider(credentials_provider)
-        .build();
+pub struct FileSync {
+    file_sync_config: FileSyncConfig,
+    aws_client: Client,
+}
 
+impl FileSync {
+    pub fn new(file_sync_config: FileSyncConfig) -> Self {
+        let credentials_provider =
+            SharedCredentialsProvider::new(Credentials::new("test", "test", None, None, "test"));
+        // Set up the AWS region and config
+        let config = aws_types::SdkConfig::builder()
+            .endpoint_url("http://192.168.0.185:4566")
+            .region(Region::new("us-east-1"))
+            .credentials_provider(credentials_provider)
+            .build();
+        Self {
+            file_sync_config,
+            aws_client: Client::new(&config),
+        }
+    }
+}
+
+async fn source_path_listener(file_sync: Arc<FileSync>) {
     // Create an S3 client
-    let client = Client::new(&config);
-
-    // Specify your bucket name
     let bucket_name = "sync-files";
 
     // List objects in the bucket
-    let resp = client
+    let resp = file_sync
+        .aws_client
         .list_objects_v2()
         .bucket(bucket_name)
         .send()
@@ -51,8 +63,11 @@ async fn source_path_listener(source_path: String) {
         println!("No files found in the bucket.");
     }
     loop {
-        println!("Looking for files in {}", source_path);
-        let src_path = Path::new(&source_path);
+        println!(
+            "Looking for files in {}",
+            file_sync.file_sync_config.source_path
+        );
+        let src_path = Path::new(&file_sync.file_sync_config.source_path);
         fs::create_dir_all(src_path).unwrap();
         let entries = fs::read_dir(src_path).unwrap();
         for entry in entries {
@@ -79,6 +94,6 @@ async fn source_path_listener(source_path: String) {
 }
 
 pub async fn run(file_config: FileSyncConfig) {
-    task::spawn(async move { source_path_listener(file_config.source_path).await });
-    println!("Destination path: {}", file_config.destination_path);
+    let file_sync = Arc::new(FileSync::new(file_config));
+    task::spawn(async move { source_path_listener(Arc::clone(&file_sync)).await });
 }

@@ -44,7 +44,6 @@ async fn main() {
             println!("Error: {}", e);
         }
     }
-
     loop {
         thread::sleep(Duration::new(15, 0));
     }
