@@ -1,15 +1,8 @@
 {
-    "ServerConfig": {
-        "enabled": false,
-        "host": "127.0.0.1",
-        "port": 7878
-    },
     "FileSyncConfig": {
-        "source_path": "/Users/john/Desktop/sync/src",
-        "destination_path": "/Users/john/Desktop/sync/dest",
         "s3_path": "http://192.168.0.69:4566",
         "bucket_name": "sync-files",
-        "source_s3_prefix": "MAC_",
-        "destination_s3_prefix": "WINDOWS_"
+        "s3_prefix": "MAC_",
+        "destination_path": "/Users/john/Desktop/sync/dest"
     }
 }
