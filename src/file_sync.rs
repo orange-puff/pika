@@ -8,19 +8,13 @@ use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
-use tokio::task;
 
 #[derive(Deserialize)]
 pub struct FileSyncConfig {
-    source_path: String,
-    destination_path: String,
     s3_path: String,
     bucket_name: String,
-    source_s3_prefix: String,
-    destination_s3_prefix: String,
+    s3_prefix: String,
+    destination_path: String,
 }
 
 pub struct FileSync {
@@ -43,26 +37,58 @@ impl FileSync {
             aws_client: Client::new(&config),
         }
     }
-}
 
-async fn destination_path_listener(file_sync: Arc<FileSync>) {
-    println!("Destination path listener started");
-    println!(
-        "Downloading files from S3 bucket {} to {}",
-        file_sync.file_sync_config.bucket_name, file_sync.file_sync_config.destination_path
-    );
+    pub async fn upload(&self, path: &Path) -> i32 {
+        let file_name =
+            self.file_sync_config.s3_prefix.clone() + path.file_name().unwrap().to_str().unwrap();
 
-    let dest_path = Path::new(&file_sync.file_sync_config.destination_path);
-    if let Err(e) = fs::create_dir_all(dest_path) {
-        eprintln!("Failed to create directory: {}", e);
-        return ();
+        let mut file = match File::open(&path) {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("Could not open file {:?}: {}", path, e);
+                return 1;
+            }
+        };
+
+        let mut buffer = Vec::new();
+        if let Err(e) = file.read_to_end(&mut buffer) {
+            eprintln!("Failed to read file {:?}: {}", path, e);
+            return 1;
+        }
+
+        let byte_stream = ByteStream::from(buffer);
+
+        if let Err(e) = self
+            .aws_client
+            .put_object()
+            .bucket(&self.file_sync_config.bucket_name)
+            .key(&file_name)
+            .body(byte_stream)
+            .send()
+            .await
+        {
+            eprintln!("Failed to upload file to S3: {}", e);
+            return 1;
+        }
+
+        println!(
+            "Uploaded file {} to S3 bucket {}",
+            file_name, self.file_sync_config.bucket_name
+        );
+        return 0;
     }
 
-    loop {
-        match file_sync
+    pub async fn download(&self) -> i32 {
+        let dest_path = Path::new(&self.file_sync_config.destination_path);
+        if let Err(e) = fs::create_dir_all(dest_path) {
+            eprintln!("Failed to create directory: {}", e);
+            return 1;
+        }
+
+        match self
             .aws_client
             .list_objects_v2()
-            .bucket(&file_sync.file_sync_config.bucket_name)
+            .bucket(&self.file_sync_config.bucket_name)
             .send()
             .await
         {
@@ -70,13 +96,13 @@ async fn destination_path_listener(file_sync: Arc<FileSync>) {
                 Some(contents) => {
                     for file in contents {
                         if let Some(key) = file.key() {
-                            if key.starts_with(&file_sync.file_sync_config.destination_s3_prefix) {
+                            if !key.starts_with(&self.file_sync_config.s3_prefix) {
                                 println!("Downloading file: {}", key);
 
-                                let get_object_output = match file_sync
+                                let get_object_output = match self
                                     .aws_client
                                     .get_object()
-                                    .bucket(&file_sync.file_sync_config.bucket_name)
+                                    .bucket(&self.file_sync_config.bucket_name)
                                     .key(key)
                                     .send()
                                     .await
@@ -89,12 +115,7 @@ async fn destination_path_listener(file_sync: Arc<FileSync>) {
                                 };
 
                                 let local_path =
-                                    Path::new(&file_sync.file_sync_config.destination_path).join(
-                                        key.replace(
-                                            &file_sync.file_sync_config.destination_s3_prefix,
-                                            "",
-                                        ),
-                                    );
+                                    Path::new(&self.file_sync_config.destination_path).join(key);
 
                                 let bytes = match get_object_output.body.collect().await {
                                     Ok(bytes) => bytes.into_bytes(),
@@ -114,10 +135,10 @@ async fn destination_path_listener(file_sync: Arc<FileSync>) {
                                 }
 
                                 // delete file from S3
-                                if let Err(e) = file_sync
+                                if let Err(e) = self
                                     .aws_client
                                     .delete_object()
-                                    .bucket(&file_sync.file_sync_config.bucket_name)
+                                    .bucket(&self.file_sync_config.bucket_name)
                                     .key(key)
                                     .send()
                                     .await
@@ -135,108 +156,6 @@ async fn destination_path_listener(file_sync: Arc<FileSync>) {
                 eprintln!("Failed to list objects: {}", e);
             }
         }
-        thread::sleep(Duration::new(15, 0));
+        return 0;
     }
-}
-
-async fn source_path_listener(file_sync: Arc<FileSync>) {
-    println!("Source path listener started");
-    println!(
-        "Looking for files in {} and uploading to S3 bucket {}",
-        file_sync.file_sync_config.source_path, file_sync.file_sync_config.bucket_name
-    );
-
-    let src_path = Path::new(&file_sync.file_sync_config.source_path);
-    if let Err(e) = fs::create_dir_all(src_path) {
-        eprintln!("Failed to create directory: {}", e);
-        return ();
-    }
-
-    loop {
-        let entries = match fs::read_dir(src_path) {
-            Ok(entries) => entries,
-            Err(e) => {
-                eprintln!("Failed to read directory: {}", e);
-                thread::sleep(Duration::new(15, 0));
-                continue;
-            }
-        };
-
-        for entry_result in entries {
-            let entry = match entry_result {
-                Ok(entry) => entry,
-                Err(e) => {
-                    eprintln!("Failed to read directory entry: {}", e);
-                    continue;
-                }
-            };
-
-            let path = entry.path();
-
-            if path.is_file() {
-                println!("Found file: {:?}.", path);
-
-                let mut file = match File::open(&path) {
-                    Ok(file) => file,
-                    Err(e) => {
-                        eprintln!("Could not open file {:?}: {}", path, e);
-                        continue;
-                    }
-                };
-
-                let mut buffer = Vec::new();
-                if let Err(e) = file.read_to_end(&mut buffer) {
-                    eprintln!("Failed to read file {:?}: {}", path, e);
-                    continue;
-                }
-
-                let byte_stream = ByteStream::from(buffer);
-
-                // |n| n.to_str() is a closure where n is the arg
-                let file_name = file_sync.file_sync_config.source_s3_prefix.clone()
-                    + match path.file_name().and_then(|n| n.to_str()) {
-                        Some(name) => name,
-                        None => {
-                            eprintln!("Invalid file name: {:?}", path);
-                            continue;
-                        }
-                    };
-
-                println!(
-                    "Sending {} to S3 bucket {}...",
-                    file_name, file_sync.file_sync_config.bucket_name
-                );
-
-                if let Err(e) = file_sync
-                    .aws_client
-                    .put_object()
-                    .bucket(&file_sync.file_sync_config.bucket_name)
-                    .key(file_name)
-                    .body(byte_stream)
-                    .send()
-                    .await
-                {
-                    eprintln!("Failed to upload file to S3: {}", e);
-                    continue;
-                }
-
-                println!("Removing file {:?}...", path);
-                if let Err(e) = std::fs::remove_file(&path) {
-                    eprintln!("Failed to remove file {:?}: {}", path, e);
-                }
-            }
-        }
-
-        thread::sleep(Duration::new(15, 0));
-    }
-}
-
-pub async fn run(file_config: FileSyncConfig) {
-    let file_sync = Arc::new(FileSync::new(file_config));
-
-    let file_sync_for_source = Arc::clone(&file_sync);
-    let file_sync_for_destination = Arc::clone(&file_sync);
-
-    task::spawn(async move { source_path_listener(file_sync_for_source).await });
-    task::spawn(async move { destination_path_listener(file_sync_for_destination).await });
 }

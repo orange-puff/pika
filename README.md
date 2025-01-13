@@ -4,9 +4,15 @@ This is a simple console app that allows syncing files between my Mac and Window
 # Usage 
 
 ```
-pika up file.txt
-pika up dir # will zip and upload
-pika down # will download all files with matching prefix
+pika -u file.txt
+pika -u dir # will zip and upload
+pika -d # will download all files with matching prefix
+```
+
+# Updating on Mac
+```
+cp target/debug/pika /usr/local/bin
+cp config.json ~/.pika/config.json
 ```
 
 # Usage
